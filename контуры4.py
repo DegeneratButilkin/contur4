@@ -21,25 +21,25 @@ def rotate_image(mat, angle):
     rotated_mat = cv2.warpAffine(mat, rotation_mat, (bound_w, bound_h))
     return rotated_mat
 
-# возвращает вложенный список строк
+# возвращает отсортированные по строкам таблицу ячеек
 # [[((x,y),(w,h),angle)),((x,y),(w,h),angle)),...],[((x,y),(w,h),angle)),((x,y),(w,h),angle)),...],]
 def сортировка_контуров(контуры):
     контуры2 = контуры.copy()
     таблицаЯчеек = []
     while len(контуры2) > 0:
-        t = контуры2[0] # первый попавшийся
+        t = контуры2[0] # первый попавшийся контур(ячейка)
         y = контуры2[0][0][1] # смотрим кординату y
         строкаКонтуров = [] # здесь будут контрура принадлежащие одной строке
-        for _ in контуры2[:]:
+        for _ in контуры2[:]: # смотрим все ячейки
             nextY = _[0][1]
-            if y+5 > nextY > y-5:
-                y = nextY
-                строкаКонтуров.append(_)
-                контуры2.remove(_)
-        таблицаЯчеек.append(строкаКонтуров)
-    return таблицаЯчеек
+            if y+5 > nextY > y-5: # если y следующей ячейки находится в диапазоне +-5 пикселей
+                y = nextY 
+                строкаКонтуров.append(_) #добавляем эту ячейку в список
+                контуры2.remove(_) # и удаляем из входного сиска
+        таблицаЯчеек.append(строкаКонтуров)# получившиюся строку добавляем в выходной список
+    return таблицаЯчеек # возвращаем влложенный список строк
             
-            
+# функция просто ищет в строке ячеек мин и макс координаты углов ячеек и на основе их вырезает нужный прямоугольник
 def показать_строку(таблицаТочек,n):
     L = len(таблицаТочек)
     строка = таблицаТочек[L-n]
@@ -80,12 +80,12 @@ def показать_строку(таблицаТочек,n):
         
 
 image_file = "bt.png"
-img = cv2.imread(image_file)
-gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-ret, thresh = cv2.threshold(gray, 20, 255, cv2.THRESH_BINARY)
-img_erode = cv2.erode(thresh, np.ones((3, 3), np.uint8), iterations=1)
+img = cv2.imread(image_file) # чтение в img
+gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) # конвертация в серый
+ret, thresh = cv2.threshold(gray, 20, 255, 0, cv2.THRESH_BINARY) #всё что темнее 20 краситься в 0 иначе в 255
+img_erode = cv2.erode(thresh, np.ones((3, 3), np.uint8), iterations=1) # чёрные пиксели красят вокрук все соседние, 1 проход
 
-# Get contours
+# поиск контуров (здесь нужен только самый большой контур) для определения угла поворота
 contours, hierarchy = cv2.findContours(img_erode, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
 output = img.copy()
@@ -128,13 +128,16 @@ angle = 180.0 / math.pi * math.atan(edge2 / edge1)
 print("угол", angle)
 # конец определения угла поворота
 
-roterode = rotate_image(img_erode, angle)
-rotimg = rotate_image(img, angle)
+roterode = rotate_image(img_erode, angle) # поворот уже преобразованного изображения на нужный угол
+rotimg = rotate_image(img, angle) #поворот оригинального изображения
 cv2.imshow("rotate", rotimg)  # показывает повёрнутое изображение
-cv2.waitKey(0)
+cv2.waitKey(0) # ждать нажатия клавиши (иначе ничего не покажет)
 
+# ещё раз поиск контуров но уже на повёрнутом изображении, все координаты точек в contours, а в hierarchy их иерархия (вложенность)
 contours, hierarchy = cv2.findContours(roterode, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
+# здесь функция преобразования беспорядочных координат отрезков контуров из contours
+# с помощью информации об их иерархии преобразуется в ячейку вида ((x,y),(w,h),angle)) - прямоугольник
 n = 0
 ячейки = []
 for idx, contour in enumerate(contours):
@@ -147,21 +150,14 @@ for idx, contour in enumerate(contours):
     if hierarchy[0][idx][3] == 1:
         n+=1
         rect = cv2.minAreaRect(contour) # выход:((x,y),(w,h),angle))
-        #print(contour[0])
-        #input()
         ячейки.append(rect)
-        #print(rect)
-        #input()
-        #box = cv2.boxPoints(rect)
-        #box = np.int0(box)
-        #print(box)
-        #input()
-        #cv2.drawContours(rotimg,[box],0,(250,0,0),1)
-
-таблица = сортировка_контуров(ячейки)
+       
+#
+таблица = сортировка_контуров(ячейки) # сортировка прямоугольников по строкам
 print(таблица[0])
 print("-----")
 
+# преобразование ячеек из x, y, ширина, высота, угол в просто координаты 4 углов.
 таблицаТочек = []
 for _ in таблица:
     строка = []
@@ -170,17 +166,23 @@ for _ in таблица:
         #input()
         строка.append(cv2.boxPoints(__))
     таблицаТочек.append(строка)
+#-----------------------------------------------------
 
 print(таблицаТочек[0])
+
+# просто рисование красных кружков в каждой ячейке (нафиг не надо)
 for _ in таблицаТочек:
     for __ in _:
         for ___ in __:
             #print(___)
             #input()
             cv2.circle(rotimg,(int(___[0]),int(___[1])) , 2, (0,0,255), 2)
-          
-показать_строку(таблицаТочек,47)
+#---------------------------------------------------------------
 
+показать_строку(таблицаТочек,7) # показ строки
+
+
+# просто рисование номера ячейки  в каждой ячейке (нафиг не надо)
 n = 1
 d = 1
 for _ in таблица:
